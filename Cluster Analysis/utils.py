@@ -5,6 +5,13 @@ import numpy as np
 from sklearn.preprocessing import LabelEncoder
 import seaborn as sns
 import matplotlib.pyplot as plt
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestClassifier
+from mlxtend.feature_selection import ColumnSelector
+from sklearn.svm import SVC
+from sklearn.metrics import f1_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.feature_extraction.text import TfidfVectorizer
 
 # ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------ First Clustering Stage ----------------------------------------------------------------------------------
@@ -37,6 +44,15 @@ def extract_password(name):
         return name_list[1]
     else:
         return ''
+
+def remove_word_after_echo(command):
+    pattern = r'echo \w{16}'
+    return re.sub(pattern, 'value', command)
+
+def replace_root_without_dots(command):
+    pattern = r'"root [^\s]+"'
+    return re.sub(pattern, 'password', command)
+
     
 
 # Command normalization--> used to reduce dimensionality of unique commands
@@ -242,3 +258,103 @@ def cluster_visualization(df, cluster_name):
     # Show the plot
     plt.tight_layout()
     plt.show()
+
+
+# ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------ Third Clustering Stage ----------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+def command_improve_normalization(df):
+    df = command_normalization(df)
+
+    # Replace echo 23497y92374y324 to a general form
+    # Command example
+    '''
+    echo 23497y92374y324--> echo value
+    echo dcj38NS8n208311--> echo value
+    '''
+    df['_source.commands'] = df['_source.commands'].apply(lambda x: remove_word_after_echo(x))
+
+    # Replace root password to a general form
+    # Command example
+    '''
+    root admin-->echo password
+    echo Apple2--> echo password
+    '''
+    df['_source.commands'] = df['_source.commands'].apply(lambda x: replace_root_without_dots(x))
+    return df
+
+def train(X_train,X_test,y_train,y_test):
+
+    # Define a list of models
+    models = [
+        {
+            'name': 'RandomForest',
+            'model': RandomForestClassifier(random_state=42, class_weight='balanced')
+        },
+        {
+            'name': 'SVM',
+            'model': SVC(probability=False, random_state=42, class_weight='balanced')
+        }
+    ]
+
+    # Define hyperparameter grids for RandomForest
+    rf_param_grid = {
+        'model__n_estimators': [50, 100, 150],
+        'model__max_depth': [None, 10, 20, 30],
+        'model__min_samples_split': [2, 5, 10],
+        'model__min_samples_leaf': [1, 2, 4]
+    }
+
+    # Define hyperparameter grids for SVM
+    svm_param_grid = {
+        'model__C': [0.1, 1, 10],
+        'model__kernel': ['linear', 'rbf'],
+        'model__gamma': ['scale', 'auto', 0.1, 1]
+    }
+
+    # Create a dictionary to map models to their respective parameter grids
+    param_grids = {
+        'RandomForest': rf_param_grid,
+        'SVM': svm_param_grid
+    }
+
+    # Create an empty list to store the best models and results
+    best_models = []
+
+    # Iterate over the models and perform hyperparameter tuning
+    for model_info in models:
+        model_name = model_info['name']
+        model = model_info['model']
+
+        # Define our Pipeline
+        steps = [
+            ('col_selector', ColumnSelector(cols=('_source.commands'), drop_axis=True)), # Select column
+            ('tfidf', TfidfVectorizer()), # Perform Tf idf
+            ('model', model)     # Model step
+        ]
+
+        # Create the pipeline
+        pipeline = Pipeline(steps)
+
+        # Define the hyperparameter grid for the current model
+        param_grid = param_grids[model_name]
+
+        # Perform GridSearchCV for hyperparameter tuning
+        grid_search = GridSearchCV(pipeline, param_grid, cv=5, scoring='f1_macro', n_jobs=-1, verbose=1)
+        grid_search.fit(X_train, y_train)
+
+        # Get the best model
+        best_model = grid_search.best_estimator_
+
+        # Make predictions with the best model
+        y_pred = best_model.predict(X_test)
+
+        # Calculate the F1 score
+        f1 = f1_score(y_test, y_pred, average='macro')
+
+        # Store the best model and its results
+        best_models.append({'model_name': model_name, 'best_model': best_model, 'f1_score': f1,'output':y_pred})
+        
+    return best_models
+
