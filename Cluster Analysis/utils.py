@@ -167,7 +167,6 @@ def plot_corr_mat(df):
     # Correlation plot
     plt.figure(figsize=(10, 8))
     sns.heatmap(df_corr.corr(), annot=True, cmap='coolwarm', linewidths=0.1)
-    plt.title('Correlation matrix')
     plt.show()
     del df_corr
 
@@ -181,9 +180,9 @@ def cluster_visualization(df, cluster_name):
     clusters = grouped.index
     mean_duration = grouped.values
     ax[0,0].bar(clusters, mean_duration, color='skyblue', edgecolor='navy', alpha=0.7)
-    ax[0,0].set_xlabel('Cluster', fontsize=14)
-    ax[0,0].set_ylabel('Mean attack duration (s)', fontsize=14)
-    ax[0,0].set_title('Mean attack duration by cluster', fontsize=16, fontweight='bold')
+    ax[0,0].set_xlabel('Cluster', fontsize=10)
+    ax[0,0].set_ylabel('Mean attack duration (s)', fontsize=10)
+    ax[0,0].set_title('Mean attack duration by cluster', fontsize=13, fontweight='bold')
     ax[0,0].grid(axis='y', linestyle='--', alpha=0.6)
     ax[0,0].set_xticks(clusters)
 
@@ -192,9 +191,9 @@ def cluster_visualization(df, cluster_name):
     clusters = grouped.index
     mean_wcount = grouped.values
     ax[0,1].bar(clusters, mean_wcount, color='skyblue', edgecolor='navy', alpha=0.7)
-    ax[0,1].set_xlabel('Cluster', fontsize=14)
-    ax[0,1].set_ylabel('Mean word count command', fontsize=14)
-    ax[0,1].set_title('Mean word count command by cluster', fontsize=16, fontweight='bold')
+    ax[0,1].set_xlabel('Cluster', fontsize=10)
+    ax[0,1].set_ylabel('Mean word count', fontsize=10)
+    ax[0,1].set_title('Mean word count command by cluster', fontsize=13, fontweight='bold')
     ax[0,1].grid(axis='y', linestyle='--', alpha=0.6)
     ax[0,1].set_xticks(clusters)
 
@@ -203,9 +202,9 @@ def cluster_visualization(df, cluster_name):
     clusters = grouped.index
     mean_password = grouped.values
     ax[1,0].bar(clusters, mean_password, color='skyblue', edgecolor='navy', alpha=0.7)
-    ax[1,0].set_xlabel('Cluster', fontsize=14)
-    ax[1,0].set_ylabel('Mean length password', fontsize=14)
-    ax[1,0].set_title('Mean length password by cluster', fontsize=16, fontweight='bold')
+    ax[1,0].set_xlabel('Cluster', fontsize=10)
+    ax[1,0].set_ylabel('Mean length password', fontsize=10)
+    ax[1,0].set_title('Mean length password by cluster', fontsize=13, fontweight='bold')
     ax[1,0].grid(axis='y', linestyle='--', alpha=0.6)
     ax[1,0].set_xticks(clusters)
 
@@ -217,9 +216,9 @@ def cluster_visualization(df, cluster_name):
     width = 0.4
     ax[1,1].bar(clusters - width/2, count_yes, width, color='skyblue', edgecolor='navy', alpha=0.7, label='Yes')
     ax[1,1].bar(clusters + width/2, count_no, width, color='orange', edgecolor='maroon', alpha=0.7, label='No')
-    ax[1,1].set_xlabel('Cluster', fontsize=14)
-    ax[1,1].set_ylabel('Count', fontsize=14)
-    ax[1,1].set_title('Link download in Each Cluster', fontsize=16, fontweight='bold')
+    ax[1,1].set_xlabel('Cluster', fontsize=10)
+    ax[1,1].set_ylabel('Count', fontsize=10)
+    ax[1,1].set_title('Link download in Each Cluster', fontsize=13, fontweight='bold')
     ax[1,1].grid(axis='y', linestyle='--', alpha=0.6)
     ax[1,1].set_xticks(clusters)
     ax[1,1].legend()
@@ -232,9 +231,9 @@ def cluster_visualization(df, cluster_name):
     width = 0.4
     ax[2,0].bar(clusters - width/2, count_ssh, width, color='skyblue', edgecolor='navy', alpha=0.7, label='ssh')
     ax[2,0].bar(clusters + width/2, count_telnet, width, color='orange', edgecolor='maroon', alpha=0.7, label='telnet')
-    ax[2,0].set_xlabel('Cluster', fontsize=14)
-    ax[2,0].set_ylabel('Count', fontsize=14)
-    ax[2,0].set_title('Protocol used by Cluster', fontsize=16, fontweight='bold')
+    ax[2,0].set_xlabel('Cluster', fontsize=10)
+    ax[2,0].set_ylabel('Count', fontsize=10)
+    ax[2,0].set_title('Protocol used by Cluster', fontsize=13, fontweight='bold')
     ax[2,0].grid(axis='y', linestyle='--', alpha=0.6)
     ax[2,0].set_xticks(clusters)
     ax[2,0].legend()
@@ -247,9 +246,9 @@ def cluster_visualization(df, cluster_name):
     width = 0.4
     ax[2,1].bar(clusters - width/2, count_yes, width, color='skyblue', edgecolor='navy', alpha=0.7, label='Yes')
     ax[2,1].bar(clusters + width/2, count_no, width, color='orange', edgecolor='maroon', alpha=0.7, label='No')
-    ax[2,1].set_xlabel('Cluster', fontsize=14)
-    ax[2,1].set_ylabel('Count', fontsize=14)
-    ax[2,1].set_title('Chmod found per cluster', fontsize=16, fontweight='bold')
+    ax[2,1].set_xlabel('Cluster', fontsize=10)
+    ax[2,1].set_ylabel('Count', fontsize=10)
+    ax[2,1].set_title('Chmod found per cluster', fontsize=13, fontweight='bold')
     ax[2,1].grid(axis='y', linestyle='--', alpha=0.6)
     ax[2,1].set_xticks(clusters)
     ax[2,1].legend()
