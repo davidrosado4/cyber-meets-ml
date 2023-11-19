@@ -9,7 +9,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 from mlxtend.feature_selection import ColumnSelector
 from sklearn.svm import SVC
-from sklearn.metrics import f1_score
+from sklearn.metrics import precision_score, recall_score, f1_score
 from sklearn.model_selection import GridSearchCV
 from sklearn.feature_extraction.text import TfidfVectorizer
 
@@ -349,11 +349,19 @@ def train(X_train,X_test,y_train,y_test):
         # Make predictions with the best model
         y_pred = best_model.predict(X_test)
 
-        # Calculate the F1 score
+        # Compute precision
+        precision = precision_score(y_test, y_pred, average='macro')
+
+        # Compute recall
+        recall = recall_score(y_test, y_pred, average='macro')
+
+        # Compute F1 score
         f1 = f1_score(y_test, y_pred, average='macro')
 
+
         # Store the best model and its results
-        best_models.append({'model_name': model_name, 'best_model': best_model, 'f1_score': f1,'output':y_pred})
+        best_models.append({'model_name': model_name, 'best_model': best_model, 'f1_score': f1,
+                            'recall': recall, 'precision':precision,'output':y_pred})
         
     return best_models
 
