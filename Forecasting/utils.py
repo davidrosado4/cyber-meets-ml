@@ -3,6 +3,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.seasonal import STL
+from datetime import datetime
+from sklearn.metrics import mean_absolute_percentage_error
+from statsmodels.tsa.arima.model import ARIMA
 #---------------------- General functions ----------------------#
 
 def select_country(df, country_name):
@@ -187,7 +190,100 @@ def decomposition_ts(daily_count):
     plt.tight_layout()
     plt.show()
 
+def plot_results_classical_approach(pred, cf, train, test, country):
+    """
+    Plot the results of a classical time series forecasting approach.
 
+    Parameters:
+    - pred (pd.Series): Predicted values.
+    - cf (tuple): Confidence interval for the predictions.
+    - train (pd.Series): Historic training data.
+    - test (pd.Series): Actual test data.
+    - country (str): Name of the country for which predictions were made.
+
+    Example:
+    >>> plot_results_classical_approach(predictions, confidence_interval, training_data, testing_data, 'United States')
+    """
+
+    # Align predicted values with test index
+    pred = pd.Series(pred.values, index=test.index)
+
+    # Create a subplot with two plots (2 rows, 1 column)
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(15, 14))
+
+    # Plot the last month
+    x = range(pred.size)
+    axes[0].plot(x, test.values, label='Actual', linewidth=2.0, color='steelblue')
+    axes[0].plot(x, pred, linewidth=2.0, color='orange', label='Predicted')
+    axes[0].fill_between(x,
+                         cf[0],
+                         cf[1], color='grey', alpha=.3)
+    
+    # Plot beautiful x-axis
+    date_objects = [datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S") for date in test.index]
+    formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
+    axes[0].set_xticks(range(0, len(formatted_dates), 5))
+    axes[0].set_xticklabels(formatted_dates[::5], rotation=45, ha='right')
+    
+    # Calculate Mean Absolute Percentage Error (MAPE) for evaluation
+    mape = mean_absolute_percentage_error(test.values, pred) * 100
+    axes[0].set_title('Mean Absolute Percentage Error {0:.2f}%'.format(mape))
+    axes[0].legend(loc='best')
+    axes[0].grid(True)
+    fig.show()
+
+    # Plot the whole time series with teaching run and prediction
+    if country == 'Spain':
+        # For Spain --> ARIMA(1,0,1)
+        model = ARIMA(train.values, order=(1, 0, 1))
+    elif country == 'USA':
+        # For USA --> ARIMA(0,1,2)
+        model = ARIMA(train.values, order=(0, 1, 2))
+    elif country == 'Singapore':
+        # For Singapore --> ARIMA(3,0,1)
+        model = ARIMA(train.values, order=(3, 0, 1))
+    elif country == 'Germany':
+        # For Germany--> ARIMA(1,0,2)
+        model = ARIMA(train.values, order=(1, 0, 2))
+    elif country == 'Japan':
+        # For Japan--> ARIMA(1,0,4)
+        model = ARIMA(train.values, order=(1, 0, 4))
+
+    model_fit = model.fit()
+    
+    axes[1].plot(range(train.size), train.values, label='Historic', linewidth=2.0, color=(0.36, 0.73, 0.36))
+    fitted_values = pd.Series(model_fit.fittedvalues, index=train.index)
+    axes[1].plot(range(train.size), fitted_values, color='red', label='Teaching Run', linewidth=2.0)
+    axes[1].plot(range(train.size, train.size + pred.size), pred, color='orange', label='Prediction', linewidth=2.0)
+    axes[1].plot(range(train.size, train.size + pred.size), test.values, color='steelblue', label='Actual', linewidth=2.0)
+    axes[1].fill_between(range(train.size, train.size + pred.size),
+                         cf[0],
+                         cf[1], color='grey', alpha=.3)
+
+    plt.show()
+
+def prophet_data_format(df):
+    """
+    Format the input DataFrame for use with the Prophet time series forecasting model.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame containing time series data.
+
+    Returns:
+    - pd.DataFrame: Formatted DataFrame with columns 'ds' for dates and 'y' for values.
+
+    Example:
+    >>> formatted_df = prophet_data_format(time_series_data)
+    """
+
+    # Reset index and rename columns to 'ds' and 'y'
+    df_prophet = df.reset_index()
+    df_prophet.columns = ['ds', 'y']
+
+    # Convert 'ds' column to datetime format
+    df_prophet['ds'] = pd.to_datetime(df_prophet['ds'])
+
+    return df_prophet
 
 
 
