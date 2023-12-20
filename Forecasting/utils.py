@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
 from statsmodels.tsa.seasonal import STL
 from datetime import datetime
-from sklearn.metrics import mean_absolute_percentage_error
+from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error
+from prettytable import PrettyTable
+import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
 #---------------------- General functions ----------------------#
 
@@ -84,6 +86,17 @@ def visualize_ts(df):
 
     return daily_count
 
+def display_metrics_table(predictions, actual, countries):
+    table = PrettyTable()
+    table.field_names = ["Country", "MAPE (%)", "RMSE"]
+
+    for country, preds, actuals in zip(countries, predictions, actual):
+        mape = mean_absolute_percentage_error(actuals, preds) * 100
+        rmse = np.sqrt(mean_squared_error(actuals, preds))
+
+        table.add_row([country, f"{mape:.2f}", f"{rmse:.2f}"])
+
+    print(table)
 
 
 
@@ -116,7 +129,7 @@ def trend(daily_count):
     plt.xlabel('Date')
     plt.ylabel('Cyberattacks')
     plt.grid(True)
-    plt.legend(loc='best')
+    plt.legend(loc='upper left')
     plt.show()
 
 def plot_acf_pacf(country_name, country_data):
@@ -190,9 +203,9 @@ def decomposition_ts(daily_count):
     plt.tight_layout()
     plt.show()
 
-def plot_results_classical_approach(pred, cf, train, test, country):
+def plot_results_ARIMA(pred, cf, train, test, country):
     """
-    Plot the results of a classical time series forecasting approach.
+    Plot the results of an ARIMA time series forecasting approach.
 
     Parameters:
     - pred (pd.Series): Predicted values.
@@ -202,7 +215,7 @@ def plot_results_classical_approach(pred, cf, train, test, country):
     - country (str): Name of the country for which predictions were made.
 
     Example:
-    >>> plot_results_classical_approach(predictions, confidence_interval, training_data, testing_data, 'United States')
+    >>> plot_results_ARIMA(predictions, confidence_interval, training_data, testing_data, 'United States')
     """
 
     # Align predicted values with test index
@@ -259,6 +272,79 @@ def plot_results_classical_approach(pred, cf, train, test, country):
     axes[1].fill_between(range(train.size, train.size + pred.size),
                          cf[0],
                          cf[1], color='grey', alpha=.3)
+    axes[1].grid(True)
+
+    plt.show()
+
+def plot_results_prophet(pred, cf, train, test, country):
+    """
+    Plot the results of a prophet time series forecasting approach.
+
+    Parameters:
+    - pred (pd.Series): Predicted values.
+    - cf (tuple): Confidence interval for the predictions.
+    - train (pd.Series): Historic training data.
+    - test (pd.Series): Actual test data.
+    - country (str): Name of the country for which predictions were made.
+
+    Example:
+    >>> plot_results_prophet(predictions, confidence_interval, training_data, testing_data, 'United States')
+    """
+
+    # Align predicted values with test index
+    pred = pd.Series(pred.values, index=test.index)
+
+    # Create a subplot with two plots (2 rows, 1 column)
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(15, 14))
+
+    # Plot the last month
+    x = range(pred.size)
+    axes[0].plot(x, test.values, label='Actual', linewidth=2.0, color='steelblue')
+    axes[0].plot(x, pred, linewidth=2.0, color='orange', label='Predicted')
+    axes[0].fill_between(x,
+                         cf['yhat_lower'],
+                         cf['yhat_upper'], color='grey', alpha=.3)
+    
+    # Plot beautiful x-axis
+    date_objects = [datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S") for date in test.index]
+    formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
+    axes[0].set_xticks(range(0, len(formatted_dates), 5))
+    axes[0].set_xticklabels(formatted_dates[::5], rotation=45, ha='right')
+    
+    # Calculate Mean Absolute Percentage Error (MAPE) for evaluation
+    mape = mean_absolute_percentage_error(test.values, pred) * 100
+    axes[0].set_title('Mean Absolute Percentage Error {0:.2f}%'.format(mape))
+    axes[0].legend(loc='best')
+    axes[0].grid(True)
+    fig.show()
+
+    # Plot the whole time series with teaching run and prediction
+    if country == 'Spain':
+        # For Spain --> ARIMA(1,0,1)
+        model = ARIMA(train.values, order=(1, 0, 1))
+    elif country == 'USA':
+        # For USA --> ARIMA(0,1,2)
+        model = ARIMA(train.values, order=(0, 1, 2))
+    elif country == 'Singapore':
+        # For Singapore --> ARIMA(3,0,1)
+        model = ARIMA(train.values, order=(3, 0, 1))
+    elif country == 'Germany':
+        # For Germany--> ARIMA(1,0,2)
+        model = ARIMA(train.values, order=(1, 0, 2))
+    elif country == 'Japan':
+        # For Japan--> ARIMA(1,0,4)
+        model = ARIMA(train.values, order=(1, 0, 4))
+
+    model_fit = model.fit()
+    
+    axes[1].plot(range(train.size), train.values, label='Historic', linewidth=2.0, color=(0.36, 0.73, 0.36))
+    axes[1].plot(range(train.size, train.size + pred.size), pred, color='orange', label='Prediction', linewidth=2.0)
+    axes[1].plot(range(train.size, train.size + pred.size), test.values, color='steelblue', label='Actual', linewidth=2.0)
+    axes[1].fill_between(range(train.size, train.size + pred.size),
+                         cf['yhat_lower'],
+                         cf['yhat_upper'], color='grey', alpha=.3)
+    axes[1].grid(True)
+    axes[1].legend(loc='best')
 
     plt.show()
 
