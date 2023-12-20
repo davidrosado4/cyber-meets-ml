@@ -87,6 +87,28 @@ def visualize_ts(df):
     return daily_count
 
 def display_metrics_table(predictions, actual, countries):
+    """
+    Displays performance metrics (MAPE and RMSE) for predictions compared to actual values for each country.
+
+    Parameters:
+    - predictions (list of arrays): List of arrays containing predicted values for each country.
+    - actual (list of arrays): List of arrays containing actual values for each country.
+    - countries (list of str): List of country names corresponding to the predictions and actual values.
+
+    Returns:
+    - None: Prints a formatted table displaying metrics for each country.
+
+    Example:
+    >>> display_metrics_table(predictions, actual, ['United States', 'Canada', 'Germany'])
+    +--------------+---------+--------+
+    |   Country    | MAPE (%)|  RMSE  |
+    +--------------+---------+--------+
+    | United States|  5.23   | 12.45  |
+    | Canada       |  8.12   | 18.76  |
+    | Germany      |  6.45   | 15.32  |
+    +--------------+---------+--------+
+    """
+
     table = PrettyTable()
     table.field_names = ["Country", "MAPE (%)", "RMSE"]
 
@@ -378,7 +400,119 @@ def prophet_data_format(df):
 
 #---------------------- Machine learning methods ----------------------#
 
+def create_baseline_dataset(daily_count):
+    """
+    Creates a baseline dataset from daily count data, adding temporal features.
 
+    Parameters:
+    - daily_count (pd.Series): Daily count data with a datetime index.
+
+    Returns:
+    - pd.DataFrame: DataFrame with added temporal features for each day.
+
+    Example:
+    >>> baseline_df = create_baseline_dataset(daily_count)
+    """
+
+    df = pd.DataFrame({
+        'count': daily_count,
+        'month': daily_count.index.month,
+        'year': daily_count.index.year,
+        'dayofyear': daily_count.index.dayofyear,
+        'weekofyear': daily_count.index.isocalendar().week,  # Use isocalendar to get ISO week
+        'dayofweek': daily_count.index.dayofweek,
+        'quarter': daily_count.index.quarter
+    })
+
+    # Create a binary feature 'workingday' based on the day of the week
+    df['workingday'] = df['dayofweek'].apply(lambda x: 0 if x in [5, 6] else 1)
+
+    return df
+
+def train_val_test_split_ts(df):
+    """
+    Splits a time series DataFrame into training, validation, and test sets.
+
+    Parameters:
+    - df (pd.DataFrame): Time series DataFrame to be split.
+
+    Returns:
+    - tuple: Three DataFrames representing the training, validation, and test sets.
+
+    Example:
+    >>> train_df, val_df, test_df = train_val_test_split_ts(time_series_df)
+    """
+
+    # Last month for test
+    test = df[-30:]
+
+    # Previous month for validation
+    val = df[-60:-30]
+
+    # The rest for train
+    train = df[:-60]
+
+    return train, val, test
+
+def add_lags(df, lag, label_col):
+    """
+    Adds lag features to a DataFrame based on the specified lag value.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame.
+    - lag (int): Number of lag features to add.
+    - label_col (str): Name of the target variable column.
+
+    Returns:
+    - pd.DataFrame: DataFrame with added lag features.
+
+    Example:
+    >>> lag_df = add_lags(input_df, 3, 'target_column')
+    """
+
+    # Copy the DataFrame to avoid modifying the original
+    df_result = df.copy()
+
+    # Add the lag of the target variable
+    for i in range(1, lag + 1):
+        df_result[f'lag_{i}'] = df_result[label_col].shift(i)
+    
+    # Drop rows with NaN values introduced by shifting
+    df_result = df_result.dropna()
+
+    return df_result
+def create_rolling_features(df, columns, windows=[2, 3]):
+    """
+    Creates rolling features for specified columns in a DataFrame.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame.
+    - columns (list of str): List of column names for which rolling features are calculated.
+    - windows (list of int, optional): List of window sizes for rolling calculations. Default is [2, 3].
+
+    Returns:
+    - pd.DataFrame: DataFrame with added rolling features.
+
+    Example:
+    >>> feature_df = create_rolling_features(input_df, ['column1', 'column2'], windows=[3, 6])
+    """
+
+    df_result = df.copy()
+
+    for window in windows:
+        df_result[f"rolling_mean_{window}"] = df_result[columns].shift(1).rolling(window=window).mean()
+        df_result[f"rolling_std_{window}"] = df_result[columns].shift(1).rolling(window=window).std()
+        df_result[f"rolling_var_{window}"] = df_result[columns].shift(1).rolling(window=window).var()
+        df_result[f"rolling_min_{window}"] = df_result[columns].shift(1).rolling(window=window).min()
+        df_result[f"rolling_max_{window}"] = df_result[columns].shift(1).rolling(window=window).max()
+        df_result[f"rolling_min_max_ratio_{window}"] = df_result[f"rolling_min_{window}"] / df_result[f"rolling_max_{window}"]
+        df_result[f"rolling_min_max_diff_{window}"] = df_result[f"rolling_max_{window}"] - df_result[f"rolling_min_{window}"]
+
+    # Replace infinite values with NaN and fill NaN with 0
+    df_result = df_result.replace([np.inf, -np.inf], np.nan)    
+    df_result.fillna(0, inplace=True)
+
+    return df_result
 
 
 
