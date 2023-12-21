@@ -13,7 +13,7 @@ from xgboost import XGBRegressor
 from sklearn.linear_model import ElasticNet
 from sklearn.svm import SVR
 from sklearn.tree import DecisionTreeRegressor
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.ensemble import VotingRegressor
 from sklearn.ensemble import StackingRegressor
 from sklearn.decomposition import PCA
@@ -46,6 +46,33 @@ def select_country(df, country_name):
     df_result = df[df['_source.hostIP'].isin(available_IP)]
     
     return df_result
+
+def select_continent(df, continent_name):
+    """
+    Selects data from a DataFrame for a specific continent based on sensor IP.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame containing sensor data.
+    - continent_name (str): Name of the continent for which data needs to be selected.
+
+    Returns:
+    - pd.DataFrame: Filtered DataFrame containing data only for the specified continent.
+
+    Example:
+    >>> selected_data = select_continent(df_sensor_data, 'EU')
+    """
+
+    # Find the available sensor IP of the country
+    df_result = df[df['_source.hostGeoip.continent_code'] == continent_name]
+    
+    # Get the unique sensor IPs for the selected country
+    available_IP = df_result['_source.hostIP'].value_counts().index.to_numpy()
+
+    # Filter data using IP
+    df_result = df[df['_source.hostIP'].isin(available_IP)]
+    
+    return df_result
+
 
 def visualize_ts(df):
     """
