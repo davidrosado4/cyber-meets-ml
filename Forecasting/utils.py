@@ -717,7 +717,7 @@ def plot_results(y_train, y_val, y_test, y_pred, X_train, X_test, mape, model):
     plt.tight_layout()
     plt.show()
 
-def plot_feature_importance(model, X_train, name):
+def plot_features_importance(model, X_train, name):
     """
     Plots the feature importance for a given machine learning model.
 
@@ -845,12 +845,12 @@ def evaluate_models(train, validation , test, plot_figures = True, plot_feature_
         elif name == 'DecisionTreeRegressor':
             model = DecisionTreeRegressor(random_state=42, **best_trial)
         elif name == 'Voting Ensemble':
-            model = VotingRegressor(estimators=[('rf', RandomForestRegressor(**params_rf)),
-                                                ('xgb', XGBRegressor(**params_xgb)),
-                                                ('svr', SVR(**params_svr))])
+            model = VotingRegressor(estimators=[('rf', RandomForestRegressor(random_state=42, **params_rf)),
+                                                ('xgb', XGBRegressor(random_state=42, **params_xgb)),
+                                                ('svr', SVR( **params_svr))])
         elif name == 'Stacking Ensemble':
-            model = StackingRegressor(estimators=[('rf', RandomForestRegressor(**params_rf)),
-                                                ('svr', SVR(**params_svr))], final_estimator=XGBRegressor(**params_xgb))
+            model = StackingRegressor(estimators=[('rf', RandomForestRegressor(random_state=42, **params_rf)),
+                                                ('svr', SVR(**params_svr))], final_estimator=XGBRegressor(random_state=42,**params_xgb))
             
         else:
             raise ValueError("Invalid model type")
@@ -878,7 +878,7 @@ def evaluate_models(train, validation , test, plot_figures = True, plot_feature_
             
             # Print or visualize feature importance
             if hasattr(model, 'feature_importances_') and plot_feature_importance:
-                plot_feature_importance(model, X_train, name)
+                plot_features_importance(model, X_train, name)
         
     return mape_list, rmse_list
 
@@ -939,7 +939,7 @@ def parameters_search(df, max_lag, max_rolling_window):
         test_all = create_rolling_features(test_lag, 'count', windows = params['window'])
 
         # Train models
-        mape, rmse = evaluate_models(train_all, valid_all, test_all, plot_figures=False, apply_PCA= False)
+        mape, rmse = evaluate_models(train_all, valid_all, test_all, plot_figures=False, use_PCA= False)
 
         # Update minimum values for each model
         length = len(mape)
@@ -1007,7 +1007,60 @@ def create_best_combination_dataset(df, lag, window):
 
     return train_all, valid_all, test_all
 
+def all_sensors_data(df):
+    """
+    Process sensor data to create a DataFrame with date as index, IP addresses as columns, and counts as values.
 
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame containing sensor data.
+
+    Returns:
+    - pd.DataFrame: Processed DataFrame with date as index, IP addresses as columns, and counts as values.
+
+    Example:
+    >>> processed_data = all_sensors_data(df_sensor_data)
+    """
+
+    # Convert 'startTime' to datetime
+    df['date'] = pd.to_datetime(df['_source.startTime'])
+
+    # Extract the date (day) from the timestamp
+    df['date'] = pd.to_datetime(df['date'].dt.date)
+
+    # Group by 'date' and 'IP', then count occurrences
+    grouped_df = df.groupby(['date', '_source.hostIP']).size().reset_index(name='count')
+
+    # Pivot the table to have 'date' as index, 'IP' as columns, and 'count' as values
+    result_df = grouped_df.pivot_table(index='date', columns='_source.hostIP', values='count', fill_value=0)
+
+    return result_df
+
+def merge_all_sensors(df, df_country, lags):
+    """
+    Merge sensor data with country data and add lags for each sensor.
+
+    Parameters:
+    - df (pd.DataFrame): Sensor data DataFrame with date as index and sensors as columns.
+    - df_country (pd.DataFrame): Country data DataFrame with date as index and countries as columns.
+    - lags (int): Number of lags to add for each sensor.
+
+    Returns:
+    - pd.DataFrame: Merged DataFrame with lags for each sensor and country data.
+
+    Example:
+    >>> merged_data = merge_all_sensors(df_sensor_data, df_country_data, 3)
+    """
+
+    # Add lags of all sensors
+    for i in range(1, lags + 1):
+        df_lag = df.shift(i)
+        if i == 1:
+            df_result = pd.merge(df_lag, df_country, left_index=True, right_index=True)
+        else:
+            df_result = pd.merge(df_lag, df_result, left_index=True, right_index=True)
+
+    df_result.fillna(0, inplace=True)
+    return df_result
 
 
 
