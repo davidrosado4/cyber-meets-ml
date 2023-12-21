@@ -8,6 +8,17 @@ from sklearn.metrics import mean_absolute_percentage_error, mean_squared_error
 from prettytable import PrettyTable
 import numpy as np
 from statsmodels.tsa.arima.model import ARIMA
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+from xgboost import XGBRegressor
+from sklearn.linear_model import ElasticNet
+from sklearn.svm import SVR
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import VotingRegressor
+from sklearn.ensemble import StackingRegressor
+from sklearn.decomposition import PCA
+import seaborn as sns
+import optuna
 #---------------------- General functions ----------------------#
 
 def select_country(df, country_name):
@@ -514,7 +525,487 @@ def create_rolling_features(df, columns, windows=[2, 3]):
 
     return df_result
 
+def objective(trial, model_type, X_train, X_val, y_train, y_val):
+    """
+    Objective function for hyperparameter optimization using Optuna.
 
+    Parameters:
+    - trial (optuna.Trial): Optuna trial object for optimization.
+    - model_type (str): Type of model for optimization (e.g., 'RandomForest', 'GradientBoosting', 'XGBoost').
+    - X_train (pd.DataFrame): Training features.
+    - X_val (pd.DataFrame): Validation features.
+    - y_train (pd.Series): Training target variable.
+    - y_val (pd.Series): Validation target variable.
+
+    Returns:
+    - float: Mean squared error of the model predictions on the validation set.
+
+    Example:
+    >>> mse = objective(trial, 'RandomForest', X_train, X_val, y_train, y_val)
+    """
+
+    if model_type == 'RandomForest':
+        # Define search for hyperparameters
+        params = {
+            'n_estimators': trial.suggest_int('n_estimators', 10, 200),
+            'max_depth': trial.suggest_int('max_depth', 2, 32, log=True),
+            'min_samples_split': trial.suggest_float('min_samples_split', 0.1, 1.0),
+            'min_samples_leaf': trial.suggest_float('min_samples_leaf', 0.1, 0.5),
+            'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2', None])
+        }
+        model = RandomForestRegressor(random_state=42, **params)
+
+    elif model_type == 'GradientBoosting':
+        # Define the search for hyperparameters
+        params = {
+            'n_estimators': trial.suggest_int('n_estimators', 50, 200),
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.1, log=True),
+            'max_depth': trial.suggest_int('max_depth', 3, 10),
+            'min_samples_split': trial.suggest_float('min_samples_split', 0.1, 1.0),
+            'min_samples_leaf': trial.suggest_float('min_samples_leaf', 0.1, 0.5),
+            'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+            'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2', None])
+        }
+        model = GradientBoostingRegressor(random_state=42, **params)
+
+    elif model_type == 'XGBoost':
+        # Define the search for hyperparameters
+        params = {
+            'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3),
+            'n_estimators': trial.suggest_int('n_estimators', 50, 200),
+            'max_depth': trial.suggest_int('max_depth', 3, 15),
+            'min_child_weight': trial.suggest_int('min_child_weight', 1, 20),
+            'subsample': trial.suggest_float('subsample', 0.8, 1.0),
+            'colsample_bytree': trial.suggest_float('colsample_bytree', 0.8, 1.0),
+            'gamma': trial.suggest_float('gamma', 0.0, 0.3),
+            'alpha': trial.suggest_float('alpha', 0.0, 1.0),
+            'lambda': trial.suggest_float('lambda', 0.0, 2.0),
+            'scale_pos_weight': trial.suggest_float('scale_pos_weight', 1, 10),
+        }
+        model = XGBRegressor(random_state=42, **params)
+
+    elif model_type == 'SVR':
+        # Define the search for hyperparameters
+        params = {
+            'C': trial.suggest_loguniform('C', 1e-3, 1e3),
+            'kernel': trial.suggest_categorical('kernel', ['linear', 'rbf', 'poly', 'sigmoid']),
+            'gamma': trial.suggest_categorical('gamma', ['scale', 'auto']),
+            'epsilon': trial.suggest_uniform('epsilon', 0.01, 0.1)
+        }
+        model = SVR(**params)
+
+    elif model_type == 'ElasticNet':
+        # Define the search for hyperparameters
+        params = {
+            'alpha': trial.suggest_loguniform('alpha', 1e-8, 1.0),
+            'l1_ratio': trial.suggest_uniform('l1_ratio', 0.0, 1.0)
+        }
+        model = ElasticNet(random_state=42, **params)
+
+    elif model_type == 'DecisionTreeRegressor':
+        # Define the search for hyperparameters
+        params = {
+            'max_depth': trial.suggest_int('max_depth', 3, 15),
+            'min_samples_split': trial.suggest_float('min_samples_split', 0.1, 1.0),
+            'min_samples_leaf': trial.suggest_float('min_samples_leaf', 0.1, 0.5),
+            'max_features': trial.suggest_categorical('max_features', ['sqrt', 'log2', None]),
+            'max_leaf_nodes': trial.suggest_int('max_leaf_nodes', 10, 50),
+            'min_impurity_decrease': trial.suggest_float('min_impurity_decrease', 0.0, 0.5),
+        }
+        model = DecisionTreeRegressor(random_state=42, **params)
+    else:
+        raise ValueError("Invalid model type")
+
+    # Train the model
+    model.fit(X_train, y_train)
+
+    # Get predictions
+    y_pred = model.predict(X_val)
+
+    # Calculate mean squared error
+    return mean_squared_error(y_val, y_pred)
+
+def apply_PCA(train, val, test):
+    """
+    Applies Principal Component Analysis (PCA) to reduce the dimensionality of the data.
+
+    Parameters:
+    - train (pd.DataFrame): Training data.
+    - val (pd.DataFrame): Validation data.
+    - test (pd.DataFrame): Test data.
+
+    Returns:
+    - tuple: Three DataFrames representing the transformed training, validation, and test sets after PCA.
+
+    Example:
+    >>> train_pca, val_pca, test_pca = apply_PCA(train_data, val_data, test_data)
+    """
+
+    # Initialize PCA with the desired explained variance
+    pca = PCA(n_components=0.9)
+
+    # Fit PCA on the training data
+    train_pca = pca.fit_transform(train)
+
+    # Transform the val/test data using the same PCA transformation
+    val_pca = pca.transform(val)
+    test_pca = pca.transform(test)
+
+    # Convert the PCA-transformed data back to dataframes with the same structure
+    train = pd.DataFrame(data=train_pca, index=train.index, columns=[f'PC_{i}' for i in range(1, train_pca.shape[1] + 1)])
+    val = pd.DataFrame(data=val_pca, index=val.index, columns=[f'PC_{i}' for i in range(1, val_pca.shape[1] + 1)])
+    test = pd.DataFrame(data=test_pca, index=test.index, columns=[f'PC_{i}' for i in range(1, test_pca.shape[1] + 1)])
+
+    return train, val, test
+
+def plot_results(y_train, y_val, y_test, y_pred, X_train, X_test, mape, model):
+    """
+    Plots the actual vs. predicted values for the test set and the entire time series.
+
+    Parameters:
+    - y_train (pd.Series): Actual values for the training set.
+    - y_val (pd.Series): Actual values for the validation set.
+    - y_test (pd.Series): Actual values for the test set.
+    - y_pred (np.array): Predicted values for the test set.
+    - X_train (pd.DataFrame): Features for the training set.
+    - X_test (pd.DataFrame): Features for the test set.
+    - mape (float): Mean absolute percentage error of the predictions.
+    - model: Trained machine learning model.
+
+    Returns:
+    - None: Displays the plot.
+
+    Example:
+    >>> plot_results(y_train, y_val, y_test, y_pred, X_train, X_test, 5.2, trained_model)
+    """
+
+    # Create a subplot with two plots (2 rows, 1 column)
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(15, 14))
+
+    # Plot the last month
+    x = range(y_test.size)
+    axes[0].plot(x, y_test, label='Actual', linewidth=2.0, color='steelblue')
+    axes[0].plot(x, y_pred, label='Prediction', linewidth=2.0, color='orange')
+
+    # Plot beautiful x-axis
+    date_objects = [datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S") for date in X_test.index]
+    formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
+    axes[0].set_xticks(range(0, len(formatted_dates), 5))
+    axes[0].set_xticklabels(formatted_dates[::5], rotation=45, ha='right')
+    axes[0].set_title('Mean absolute percentage error {0:.2f}%'.format(mape))
+    axes[0].legend(loc='best')
+    axes[0].grid(True)
+
+    # Plot the whole time series
+    axes[1].plot(range(y_train.size), y_train, label='Historic', linewidth=2.0, color=(0.36, 0.73, 0.36))
+    axes[1].plot(range(len(X_train) + y_val.size, len(X_train) + y_val.size + y_test.size), y_test,
+                 label='Test Set', linewidth=2.0, color='steelblue')
+    axes[1].plot(range(len(X_train) + y_val.size, len(X_train) + y_val.size + y_pred.size), y_pred,
+                 label='Prediction', linewidth=2.0, color='orange')
+    axes[1].plot(range(len(X_train), len(X_train) + y_val.size), y_val, label='Validation Set', linewidth=2.0,
+                 color='gray')
+    axes[1].plot(range(y_train.size), model.predict(X_train), label='Teaching Run', linewidth=2.0, color='red')
+
+    # Plot beautiful x-axis
+    date_objects = [datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S") for date in X_train.index]
+    formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
+    axes[1].set_xticks(range(0, len(formatted_dates), 90))
+    axes[1].set_xticklabels(formatted_dates[::90], rotation=45, ha='right')
+    axes[1].set_title('Mean absolute percentage error {0:.2f}%'.format(mape))
+    axes[1].legend(loc='best')
+    axes[1].grid(True)
+    plt.tight_layout()
+    plt.show()
+
+def plot_feature_importance(model, X_train, name):
+    """
+    Plots the feature importance for a given machine learning model.
+
+    Parameters:
+    - model: Trained machine learning model with feature_importances_ attribute.
+    - X_train (pd.DataFrame): Features used for training.
+    - name (str): Name or label for the plot.
+
+    Returns:
+    - None: Displays the plot.
+
+    Example:
+    >>> plot_feature_importance(trained_model, X_train_data, 'Random Forest')
+    """
+
+    feature_importance = model.feature_importances_
+    feature_names = X_train.columns
+
+    # Print feature importance
+    print("\nFeature Importance for", name)
+
+    # Get the indices that would sort the feature_importance array in descending order
+    sorted_idx = np.argsort(feature_importance)[::-1]
+
+    # Visualize feature importance using Seaborn with ordered bars
+    plt.figure(figsize=(12, 8))
+    sns.barplot(x=feature_importance[sorted_idx], y=np.array(feature_names)[sorted_idx], palette="viridis")
+
+    plt.xlabel("Importance")
+    plt.ylabel("Feature")
+    plt.title(f"Feature Importance for {name}")
+    plt.show()
+
+def evaluate_models(train, validation , test, plot_figures = True, plot_feature_importance = True, use_PCA = False, verbose_optuna = False):
+    """
+    Evaluates different machine learning models on a time series dataset.
+
+    Parameters:
+    - train (pd.DataFrame): Training data.
+    - validation (pd.DataFrame): Validation data.
+    - test (pd.DataFrame): Test data.
+    - plot_figures (bool): Whether to plot the results.
+    - plot_feature_importance (bool): Whether to plot feature importance.
+    - use_PCA (bool): Whether to apply Principal Component Analysis (PCA) for dimensionality reduction.
+    - verbose_optuna (bool): Whether to print Optuna optimization details.
+
+    Returns:
+    - tuple: Lists containing Mean Absolute Percentage Error (MAPE) and Root Mean Squared Error (RMSE) for each model.
+
+    Example:
+    >>> mape_list, rmse_list = evaluate_models(train_data, val_data, test_data, True, True, False, True)
+    """
+    
+    # Create target variables
+    X_train = train.drop(['count'], axis = 1)
+    X_val = validation.drop(['count'], axis =1)
+    X_test = test.drop(['count'], axis = 1)
+
+    y_train = train['count']
+    y_val = validation['count']
+    y_test = test['count']
+
+    # Standarize data
+    scaler = StandardScaler()
+
+    # Fit and transform the training data
+    X_train_scaled = scaler.fit_transform(X_train)
+
+    # Transform the val/test data using the same scaler
+    X_val_scaled = scaler.transform(X_val)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Convert the scaled arrays back to DataFrames with the original index
+    X_train = pd.DataFrame(X_train_scaled, index=X_train.index, columns=X_train.columns)
+    X_val = pd.DataFrame(X_val_scaled, index=X_val.index, columns=X_val.columns)
+    X_test = pd.DataFrame(X_test_scaled, index=X_test.index, columns=X_test.columns)
+
+    if use_PCA:
+        # In this case, feature importance makes no sense
+        plot_feature_importance = False
+
+        # Apply PCA
+        X_train, X_val, X_test = apply_PCA(X_train, X_val, X_test)
+        
+
+    # Define the models and tune the parameters
+    models_name = ['RandomForest','GradientBoosting','XGBoost','SVR','ElasticNet','DecisionTreeRegressor','Voting Ensemble','Stacking Ensemble']
+    mape_list = []
+    rmse_list = []
+    for name in models_name:
+        print('\n\n==================',name,'===================\n\n')
+        # Run Optuna optimization
+        if name != 'Voting Ensemble' and name != 'Stacking Ensemble':
+            optuna.logging.set_verbosity(optuna.logging.WARNING)
+
+            # Seed for reproducibility
+            study = optuna.create_study(direction='minimize', sampler=optuna.samplers.TPESampler(seed=42))
+            study.optimize(lambda trial: objective(trial, name, X_train,X_val,y_train,y_val), n_trials=100)
+
+            if verbose_optuna:
+                # Plot the optimization history
+                optuna.visualization.plot_optimization_history(study).show()
+
+                # Plot the parallel coordinate plot
+                optuna.visualization.plot_parallel_coordinate(study).show()
+
+            # Get the best parameters of the model
+            best_trial = study.best_trial.params
+            print('Best parameters:', best_trial)
+
+        # Re-fit the model with the best parameters
+        if name == 'RandomForest':
+            model = RandomForestRegressor(random_state=42, **best_trial)
+            params_rf = best_trial
+        elif name == 'GradientBoosting':
+            model = GradientBoostingRegressor(random_state=42, **best_trial)
+        elif name == 'XGBoost':
+            model = XGBRegressor(random_state=42, **best_trial)
+            params_xgb = best_trial
+        elif name == 'SVR':
+            model = SVR(**best_trial)
+            params_svr = best_trial
+        elif name == 'ElasticNet':
+            model = ElasticNet(random_state=42, **best_trial)
+        elif name == 'DecisionTreeRegressor':
+            model = DecisionTreeRegressor(random_state=42, **best_trial)
+        elif name == 'Voting Ensemble':
+            model = VotingRegressor(estimators=[('rf', RandomForestRegressor(**params_rf)),
+                                                ('xgb', XGBRegressor(**params_xgb)),
+                                                ('svr', SVR(**params_svr))])
+        elif name == 'Stacking Ensemble':
+            model = StackingRegressor(estimators=[('rf', RandomForestRegressor(**params_rf)),
+                                                ('svr', SVR(**params_svr))], final_estimator=XGBRegressor(**params_xgb))
+            
+        else:
+            raise ValueError("Invalid model type")
+       
+        # Train the model
+        model.fit(X_train, y_train)
+
+        # Get predictions on the test
+        y_pred = model.predict(X_test)# This is equivalent to make a loop and do it separately for each day
+
+        # Compute metrics
+        mape = mean_absolute_percentage_error(y_test, y_pred)*100
+        rmse = mean_squared_error(y_test,y_pred)**.5
+        print('MAPE=',mape)
+        print('RMSE=',rmse)
+        # Append the results
+        mape_list.append(mape)
+        rmse_list.append(rmse)
+        
+
+        # Plot results
+        if plot_figures:
+            plot_results(y_train, y_val, y_test, y_pred, X_train, X_test, mape, model)
+
+            
+            # Print or visualize feature importance
+            if hasattr(model, 'feature_importances_') and plot_feature_importance:
+                plot_feature_importance(model, X_train, name)
+        
+    return mape_list, rmse_list
+
+def parameters_search(df, max_lag, max_rolling_window):
+    """
+    Perform a grid search for lag and rolling window parameters, evaluating models for each combination.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame containing time series data.
+    - max_lag (int): Maximum lag value for grid search.
+    - max_rolling_window (int): Maximum rolling window value for grid search.
+
+    Returns:
+    - dict: Results of the parameter search, including minimum MAPE, RMSE, and average values, along with corresponding parameters.
+
+    Example:
+    >>> search_results = parameters_search(df_sensor_data, 5, 10)
+    """
+
+    # Peform train/val/test split
+    train, valid, test = train_val_test_split_ts(df)
+
+    # Generate grid search for lag and window parameters
+    grid_search_parameters = []
+
+    for lag in range(0, max_lag + 1):
+        for window in range(2, max_rolling_window + 1):
+            window_list = list(range(2, window + 1))
+            grid_search_parameters.append({'lag': lag, 'window': window_list})
+
+ 
+
+    # Initialize variables to keep track of the minimum values
+    min_mape = float('inf')
+    min_rmse = float('inf')
+    min_avg_mape = float('inf')
+    min_avg_rmse = float('inf')
+    best_mape_params = None
+    best_rmse_params = None
+    best_avg_mape_params = None
+    best_avg_rmse_params = None
+    
+    # Generate grid search of parameters and find the best combination
+    print('Starting parameter gridsearch...')
+    for params in grid_search_parameters:
+        print('\n\nLags=',params['lag'])
+        print('Window=',params['window'])
+
+
+        # Create the lagged dataset
+        train_lag = add_lags(train, params['lag'], 'count')
+        valid_lag = add_lags(valid, params['lag'] ,'count')
+        test_lag = add_lags(test, params['lag'], 'count')
+
+        # Create the final dataset
+        train_all = create_rolling_features(train_lag, 'count', windows= params['window'])
+        valid_all = create_rolling_features(valid_lag, 'count', windows= params['window'])
+        test_all = create_rolling_features(test_lag, 'count', windows = params['window'])
+
+        # Train models
+        mape, rmse = evaluate_models(train_all, valid_all, test_all, plot_figures=False, apply_PCA= False)
+
+        # Update minimum values for each model
+        length = len(mape)
+        for i in range(length):
+            if mape[i] < min_mape:
+                min_mape = mape[i]
+                best_mape_params = params
+            if rmse[i] < min_rmse:
+                min_rmse = rmse[i]
+                best_rmse_params = params
+
+        # Calculate and update average values for each model
+        avg_mape = np.mean(mape)
+        avg_rmse = np.mean(rmse)
+
+        if avg_mape < min_avg_mape:
+            min_avg_mape = avg_mape
+            best_avg_mape_params = params
+        if avg_rmse < min_avg_rmse:
+            min_avg_rmse = avg_rmse
+            best_avg_rmse_params = params
+            
+    # Return the parameters        
+    result = {
+        'min_mape': min_mape,
+        'best_mape_params': best_mape_params,
+        'min_rmse': min_rmse,
+        'best_rmse_params': best_rmse_params,
+        'min_avg_mape': min_avg_mape,
+        'best_avg_mape_params': best_avg_mape_params,
+        'min_avg_rmse': min_avg_rmse,
+        'best_avg_rmse_params': best_avg_rmse_params,
+    }
+
+    return result
+
+def create_best_combination_dataset(df, lag, window):
+    """
+    Create a dataset with the best combination of lag and rolling window parameters.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame containing time series data.
+    - lag (int): Lag value for creating lag features.
+    - window (int): Rolling window size for creating rolling features.
+
+    Returns:
+    - tuple: Train, validation, and test datasets with lag and rolling window features.
+
+    Example:
+    >>> train_data, valid_data, test_data = create_best_combination_dataset(df_sensor_data, 3, [2,3,4])
+    """
+
+    # Train/valid/test split
+    train, valid, test = train_val_test_split_ts(df)
+
+    # Create lagged dataset
+    train_lag = add_lags(train, lag, 'count')
+    valid_lag = add_lags(valid, lag, 'count')
+    test_lag = add_lags(test, lag, 'count')
+
+    # Create final dataset
+    train_all = create_rolling_features(train_lag, 'count', windows=window)
+    valid_all = create_rolling_features(valid_lag, 'count', windows=window)
+    test_all = create_rolling_features(test_lag, 'count', windows=window)
+
+    return train_all, valid_all, test_all
 
 
 
