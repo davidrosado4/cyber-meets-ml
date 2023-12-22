@@ -1,4 +1,6 @@
 # General functions for the Forecasting project
+
+# Required packages
 import pandas as pd
 import matplotlib.pyplot as plt
 from statsmodels.graphics.tsaplots import plot_acf, plot_pacf
@@ -20,6 +22,9 @@ from sklearn.decomposition import PCA
 import seaborn as sns
 import optuna
 import tensorflow as tf
+from sklearn.metrics import PredictionErrorDisplay
+
+
 #---------------------- General functions ----------------------#
 
 def select_country(df, country_name):
@@ -779,7 +784,8 @@ def plot_features_importance(model, X_train, name):
     plt.title(f"Feature Importance for {name}")
     plt.show()
 
-def evaluate_models(train, validation , test, plot_figures = True, plot_feature_importance = True, use_PCA = False, verbose_optuna = False):
+def evaluate_models(train, validation , test, plot_figures = True, plot_feature_importance = True, use_PCA = False,
+                     verbose_optuna = False, display_prediction_plot = False):
     """
     Evaluates different machine learning models on a time series dataset.
 
@@ -791,6 +797,7 @@ def evaluate_models(train, validation , test, plot_figures = True, plot_feature_
     - plot_feature_importance (bool): Whether to plot feature importance.
     - use_PCA (bool): Whether to apply Principal Component Analysis (PCA) for dimensionality reduction.
     - verbose_optuna (bool): Whether to print Optuna optimization details.
+    - display_prediction_plot (bool): Whether to display the prediction plot.
 
     Returns:
     - tuple: Lists containing Mean Absolute Percentage Error (MAPE) and Root Mean Squared Error (RMSE) for each model.
@@ -907,6 +914,10 @@ def evaluate_models(train, validation , test, plot_figures = True, plot_feature_
             # Print or visualize feature importance
             if hasattr(model, 'feature_importances_') and plot_feature_importance:
                 plot_features_importance(model, X_train, name)
+        if display_prediction_plot:
+            display = PredictionErrorDisplay(y_true=y_test, y_pred=y_pred)
+            display.plot()
+            plt.show()
         
     return mape_list, rmse_list
 
