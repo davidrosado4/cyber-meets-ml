@@ -1168,7 +1168,8 @@ class WindowGenerator():
   """
   def __init__(self, input_width, label_width, shift,
                train_df, val_df, test_df,
-               label_columns=None, seed = 42):
+               label_columns=None, seed = 42,
+               batch_size=1):
     """
       Args:
       - input_width: Number of input time steps.
@@ -1178,6 +1179,7 @@ class WindowGenerator():
       - val_df: Validation data.
       - test_df: Test data.
       - label_columns: List of column names to be used as labels.
+      - batch_size: Batch size for the dataset.
       - seed: Seed for reproducibility.
     """
     # Set random seeds for reproducibility
@@ -1212,6 +1214,9 @@ class WindowGenerator():
     self.label_start = self.total_window_size - self.label_width
     self.labels_slice = slice(self.label_start, None)
     self.label_indices = np.arange(self.total_window_size)[self.labels_slice]
+
+     # Work out the batch size
+    self.batch_size = batch_size
 
   def __repr__(self):
     """
@@ -1264,7 +1269,7 @@ class WindowGenerator():
         sequence_length=self.total_window_size,
         sequence_stride=1,
         shuffle=False,
-        batch_size=1)
+        batch_size=self.batch_size)
 
     ds = ds.map(self.split_window)
 
