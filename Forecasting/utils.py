@@ -19,6 +19,7 @@ from sklearn.ensemble import StackingRegressor
 from sklearn.decomposition import PCA
 import seaborn as sns
 import optuna
+import tensorflow as tf
 #---------------------- General functions ----------------------#
 
 def select_country(df, country_name):
@@ -1093,3 +1094,375 @@ def merge_all_sensors(df, df_country, lags):
 
 
 #---------------------- Deep learning methods ----------------------#
+
+def scale(train_df, val_df, test_df):
+    scaler = StandardScaler()
+    train_df = pd.DataFrame(scaler.fit_transform(train_df), columns=train_df.columns, index=train_df.index)
+    val_df = pd.DataFrame(scaler.transform(val_df), columns=val_df.columns, index=val_df.index)
+    test_df = pd.DataFrame(scaler.transform(test_df), columns=test_df.columns, index=test_df.index)
+    return train_df, val_df, test_df, scaler
+
+
+def create_features_lstm(df, lag, window):
+    """
+    Create datasets for LSTM model training, validation, and testing.
+
+    Parameters:
+    - df (pd.DataFrame): Input DataFrame containing time series data.
+    - lag (int): Lag value for creating lag features.
+    - window (int): Rolling window size for creating rolling features.
+
+    Returns:
+    - tuple: Train, validation, and test datasets scaled for LSTM model.
+
+    Example:
+    >>> train_data, valid_data, test_data = create_features_lstm(df_sensor_data, 3, [2,3])
+    """
+
+    # Test set with the last 33 values
+    test = df[-33:]
+
+    # Valid set with the previous 33 values
+    valid = df[-66:-33]
+
+    # Train set with the remaining values
+    train = df[:-66]
+
+    # Create lagged dataset
+    train_lag = add_lags(train, lag, 'count')
+    valid_lag = add_lags(valid, lag, 'count')
+    test_lag = add_lags(test, lag, 'count')
+
+    # Create final dataset
+    train_all = create_rolling_features(train_lag, 'count', windows=window)
+    valid_all = create_rolling_features(valid_lag, 'count', windows=window)
+    test_all = create_rolling_features(test_lag, 'count', windows=window)
+
+    # Scale the data
+    train_all, valid_all, test_all, scaler = scale(train_all, valid_all, test_all)
+
+    return train_all, valid_all, test_all, scaler
+
+class WindowGenerator():
+  """
+    The `WindowGenerator` class is designed to facilitate the creation of time series datasets
+    for training, validation, and testing of machine learning models. It defines windows of
+    input and label data, allowing for easy handling of temporal relationships in the data.
+
+    Attributes:
+    - input_width: Number of time steps considered as input in each window.
+    - label_width: Number of time steps considered as labels in each window.
+    - shift: Number of time steps between consecutive windows.
+    - train_df: Training data as a pandas DataFrame.
+    - val_df: Validation data as a pandas DataFrame.
+    - test_df: Test data as a pandas DataFrame.
+    - label_columns: List of column names to be used as labels.
+
+    Methods:
+    - __init__: Initializes the WindowGenerator with the specified parameters.
+    - __repr__: Returns a string representation of the WindowGenerator object.
+    - split_window: Splits input features into inputs and labels for model training.
+    - make_dataset: Creates a TensorFlow time series dataset from the input data.
+    - train, val, test: Properties to access the training, validation, and test datasets.
+    - example: Property to get and cache an example batch of `inputs, labels` for plotting.
+  """
+  def __init__(self, input_width, label_width, shift,
+               train_df, val_df, test_df,
+               label_columns=None, seed = 42):
+    """
+      Args:
+      - input_width: Number of input time steps.
+      - label_width: Number of prediction time steps.
+      - shift: Number of time steps between consecutive windows.
+      - train_df: Training data.
+      - val_df: Validation data.
+      - test_df: Test data.
+      - label_columns: List of column names to be used as labels.
+      - seed: Seed for reproducibility.
+    """
+    # Set random seeds for reproducibility
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    tf.keras.utils.set_random_seed(42) 
+    tf.config.experimental.enable_op_determinism()
+
+    # Store the raw data.
+    self.train_df = train_df
+    self.val_df = val_df
+    self.test_df = test_df
+
+    # Work out the label column indices.
+    self.label_columns = label_columns
+    if label_columns is not None:
+      self.label_columns_indices = {name: i for i, name in
+                                    enumerate(label_columns)}
+    self.column_indices = {name: i for i, name in
+                           enumerate(train_df.columns)}
+
+    # Work out the window parameters.
+    self.input_width = input_width
+    self.label_width = label_width
+    self.shift = shift
+
+    self.total_window_size = input_width + shift
+
+    self.input_slice = slice(0, input_width)
+    self.input_indices = np.arange(self.total_window_size)[self.input_slice]
+
+    self.label_start = self.total_window_size - self.label_width
+    self.labels_slice = slice(self.label_start, None)
+    self.label_indices = np.arange(self.total_window_size)[self.labels_slice]
+
+  def __repr__(self):
+    """
+      String representation of the WindowGenerator object.
+    """
+    return '\n'.join([
+        f'Total window size: {self.total_window_size}',
+        f'Input indices: {self.input_indices}',
+        f'Label indices: {self.label_indices}',
+        f'Label column name(s): {self.label_columns}'])
+  
+  def split_window(self, features):
+    """
+      Split features into inputs and labels.
+
+      Args:
+      - features: Input features.
+
+      Returns:
+      - Tuple of inputs and labels.
+    """
+    inputs = features[:, self.input_slice, :]
+    labels = features[:, self.labels_slice, :]
+    if self.label_columns is not None:
+      labels = tf.stack(
+          [labels[:, :, self.column_indices[name]] for name in self.label_columns],
+          axis=-1)
+
+    # Slicing doesn't preserve static shape information, so set the shapes
+    # manually. This way the `tf.data.Datasets` are easier to inspect.
+    inputs.set_shape([None, self.input_width, None])
+    labels.set_shape([None, self.label_width, None])
+
+    return inputs, labels
+  
+  def make_dataset(self, data):
+    """
+      Create a time series dataset from the input data.
+
+      Args:
+      - data: Input data.
+
+      Returns:
+      - TensorFlow time series dataset.
+    """
+    data = np.array(data, dtype=np.float32)
+    ds = tf.keras.utils.timeseries_dataset_from_array(
+        data=data,
+        targets=None,
+        sequence_length=self.total_window_size,
+        sequence_stride=1,
+        shuffle=False,
+        batch_size=1)
+
+    ds = ds.map(self.split_window)
+
+    return ds
+  
+  @property
+  def train(self):
+    """
+      Property to get the training dataset.
+    """
+    return self.make_dataset(self.train_df)
+
+  @property
+  def val(self):
+    """
+      Property to get the validation dataset.
+    """
+    return self.make_dataset(self.val_df)
+
+  @property
+  def test(self):
+    """
+      Property to get the test dataset.
+    """
+    return self.make_dataset(self.test_df)
+
+  @property
+  def example(self):
+    """
+      Get and cache an example batch of `inputs, labels` for plotting.
+    """
+    result = getattr(self, '_example', None)
+    if result is None:
+      # No example batch was found, so get one from the `.train` dataset
+      result = next(iter(self.train))
+      # And cache it for next time
+      self._example = result
+    return result
+
+def compile_and_fit_lstm(model, window, patience=3, MAX_EPOCHS=40):
+    """
+    Compile and fit a Keras model using the provided window generator.
+
+    Parameters:
+    - model: Keras model.
+    - window: WindowGenerator object.
+    - patience (int): Number of epochs with no improvement after which training will be stopped if there is no improvement.
+    - MAX_EPOCHS (int): Maximum number of epochs for training.
+
+    Returns:
+    - history: Training history.
+    """
+    # Set random seeds for reproducibility
+    np.random.seed(42)
+    tf.random.set_seed(42)
+    tf.keras.utils.set_random_seed(42) 
+    tf.config.experimental.enable_op_determinism()
+
+    early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
+                                                      patience=patience,
+                                                      restore_best_weights=True)
+
+    model.compile(loss=tf.keras.losses.MeanSquaredError(),
+                  optimizer=tf.keras.optimizers.Adam(),
+                  metrics=[tf.keras.metrics.MeanAbsoluteError()])
+
+    history = model.fit(window.train, epochs=MAX_EPOCHS,
+                        validation_data=window.val,
+                        callbacks=[early_stopping])
+
+    return history
+
+def create_lstm(num_feat):
+    """
+    Create a LSTM model for time series prediction.
+
+    Parameters:
+    - num_feat (int): Number of features.
+
+    Returns:
+    - lstm_model: Sequential LSTM model.
+    """
+    # Set random seeds for reproducibility
+    np.random.seed(42)
+    tf.random.set_seed(42)
+    tf.keras.utils.set_random_seed(42) 
+    tf.config.experimental.enable_op_determinism()
+
+    lstm_model = tf.keras.models.Sequential([
+        # LSTM layer with dropout for regularization
+        tf.keras.layers.LSTM(64, activation='relu', input_shape=(3, num_feat), return_sequences=True),
+        tf.keras.layers.Dropout(0.2),
+        
+        # Another LSTM layer with dropout
+        tf.keras.layers.LSTM(64, activation='relu', return_sequences=False),
+        tf.keras.layers.Dropout(0.2),
+
+        # Dense layer with ReLU activation
+        tf.keras.layers.Dense(32, activation='relu'),
+
+        # Output layer with linear activation for regression tasks
+        tf.keras.layers.Dense(units=1)
+    ])
+    return lstm_model
+
+def get_predictions_lstm(model, scaler, train_df, test_df, window):
+    """
+        Get actual and predicted values from an LSTM model.
+
+        Parameters:
+        - model: Trained LSTM model.
+        - scaler: Scaler used for data normalization.
+        - train_df (pd.DataFrame): Training data.
+        - test_df (pd.DataFrame): Testing data.
+        - window: WindowGenerator object.
+
+        Returns:
+        - actual_train: Actual values for the training set.
+        - predictions_train: Predicted values for the training set.
+        - actual_test: Actual values for the test set.
+        - predictions_test: Predicted values for the test set.
+    """
+
+    # Get actual values
+    actual_test = pd.DataFrame(scaler.inverse_transform(test_df), columns=test_df.columns, index=test_df.index)['count']
+    actual_train = pd.DataFrame(scaler.inverse_transform(train_df), columns=train_df.columns, index=train_df.index)['count']
+
+    # Copy test and train dataframes
+    test_copy = test_df.copy()
+    train_copy = train_df.copy()
+
+    # Get predictions
+    predictions_test = model.predict(window.test)
+    predictions_train = model.predict(window.train)
+    
+    # Inverse transform to get real values
+    test_copy.iloc[3:, 0] = predictions_test.flatten()
+    train_copy.iloc[3:, 0] = predictions_train.flatten()
+
+    predictions_test = pd.DataFrame(scaler.inverse_transform(test_copy), columns=test_copy.columns, index = test_copy.index)['count']
+    predictions_train = pd.DataFrame(scaler.inverse_transform(train_copy), columns=train_copy.columns, index=train_copy.index)['count']
+
+    return actual_train[3:], predictions_train[3:], actual_test[3:], predictions_test[3:]
+
+def plot_results_LSTM(actual_train, predictions_train, actual_test, predictions_test, test_df, train_df, scaler):
+    """
+    Plot actual vs. predicted values for LSTM model.
+
+    Parameters:
+        - actual_train: Actual values for the training set.
+        - predictions_train: Predicted values for the training set.
+        - actual_test: Actual values for the test set.
+        - predictions_test: Predicted values for the test set.
+        - test_df (pd.DataFrame): Original test data.
+        - train_df (pd.DataFrame): Original training data.
+        - scaler: Scaler used for data normalization.
+    Returns:
+        - None: Plots the results.
+
+    """
+
+    # Create a subplot with two plots (2 rows, 1 column)
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(15, 14))
+
+    # Plot the last month
+    x = range(predictions_test.size)
+    axes[0].plot(x, actual_test, label='Actual', linewidth=2.0,color = 'steelblue')
+    axes[0].plot(x, predictions_test, label='Prediction', linewidth=2.0, color='orange')
+    # Plot beatiful x-axis
+    date_objects = [datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S") for date in test_df.index]
+    # Extract only the date portion
+    formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
+    # Update x-axis ticks
+    axes[0].set_xticks(range(0, len(formatted_dates), 5))
+    axes[0].set_xticklabels(formatted_dates[::5], rotation=45, ha='right')
+    mape = mean_absolute_percentage_error(actual_test, predictions_test)*100
+    axes[0].set_title('Mean absolute percentage error {0:.2f}%'.format(mape))
+    axes[0].legend(loc='best')
+    axes[0].grid(True)
+
+                
+    # Plot the whole time series
+    y_val = pd.DataFrame(scaler.inverse_transform(test_df))[0]
+    axes[1].plot(range(actual_train.size), actual_train, label='Historic', linewidth=2.0, color=(0.36, 0.73, 0.36 ))
+    axes[1].plot(range(len(train_df) + y_val.size, len(train_df) + y_val.size + actual_test.size), actual_test, label='Test Set', linewidth=2.0, color='steelblue')
+    axes[1].plot(range(len(train_df) + y_val.size, len(train_df) + y_val.size + predictions_test.size), predictions_test, label='Prediction', linewidth=2.0, color ='orange')
+    axes[1].plot(range(len(train_df), len(train_df) + y_val.size), y_val, label='Validation Set', linewidth=2.0, color='gray')
+    axes[1].plot(range(predictions_train.size), predictions_train, label='Teaching Run', linewidth=2.0, color='red')
+
+
+    # Plot beatiful x-axis
+    date_objects = [datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S") for date in train_df.index]
+    # Extract only the date portion
+    formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
+    axes[1].set_xticks(range(0, len(formatted_dates), 90))
+    axes[1].set_xticklabels(formatted_dates[::90], rotation=45, ha='right')
+    axes[1].set_title('Mean absolute percentage error {0:.2f}%'.format(mape))
+    axes[1].legend(loc='best')
+    axes[1].grid(True)
+    plt.tight_layout()
+    plt.show()
