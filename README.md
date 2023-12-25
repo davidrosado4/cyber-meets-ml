@@ -47,5 +47,3 @@ I extend my appreciation to the Global Cyber Alliance for generously providing t
 
 These organizations played a crucial role in the realization of this master thesis, and their contributions are greatly appreciated.
 
-## License
-Specify the license under which your project is distributed.
