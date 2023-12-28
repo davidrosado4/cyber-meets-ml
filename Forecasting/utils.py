@@ -384,25 +384,7 @@ def plot_results_prophet(pred, cf, train, test, country):
     axes[0].grid(True)
     fig.show()
 
-    # Plot the whole time series with teaching run and prediction
-    if country == 'Spain':
-        # For Spain --> ARIMA(1,0,1)
-        model = ARIMA(train.values, order=(1, 0, 1))
-    elif country == 'USA':
-        # For USA --> ARIMA(0,1,2)
-        model = ARIMA(train.values, order=(0, 1, 2))
-    elif country == 'Singapore':
-        # For Singapore --> ARIMA(3,0,1)
-        model = ARIMA(train.values, order=(3, 0, 1))
-    elif country == 'Germany':
-        # For Germany--> ARIMA(1,0,2)
-        model = ARIMA(train.values, order=(1, 0, 2))
-    elif country == 'Japan':
-        # For Japan--> ARIMA(1,0,4)
-        model = ARIMA(train.values, order=(1, 0, 4))
-
-    model_fit = model.fit()
-    
+    # Plot the whole time series
     axes[1].plot(range(train.size), train.values, label='Historic', linewidth=2.0, color=(0.36, 0.73, 0.36))
     axes[1].plot(range(train.size, train.size + pred.size), pred, color='orange', label='Prediction', linewidth=2.0)
     axes[1].plot(range(train.size, train.size + pred.size), test.values, color='steelblue', label='Actual', linewidth=2.0)
