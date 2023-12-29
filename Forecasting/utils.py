@@ -306,10 +306,9 @@ def plot_results_ARIMA(pred, cf, train, test, country):
     
     # Calculate Mean Absolute Percentage Error (MAPE) for evaluation
     mape = mean_absolute_percentage_error(test.values, pred) * 100
-    axes[0].set_title('Mean Absolute Percentage Error {0:.2f}%'.format(mape))
+    axes[0].set_title('MAPE={0:.2f}%'.format(mape))
     axes[0].legend(loc='best')
     axes[0].grid(True)
-    fig.show()
 
     # Plot the whole time series with teaching run and prediction
     if country == 'Spain':
@@ -338,7 +337,17 @@ def plot_results_ARIMA(pred, cf, train, test, country):
     axes[1].fill_between(range(train.size, train.size + pred.size),
                          cf[0],
                          cf[1], color='grey', alpha=.3)
+    # Plot beautiful x-axis
+    date_objects = [datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S") for date in train.index]
+    formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
+    axes[1].set_xticks(range(0, len(formatted_dates), 90))
+    axes[1].set_xticklabels(formatted_dates[::90], rotation=45, ha='right')
+    axes[1].set_title('MAPE={0:.2f}%'.format(mape))
+    axes[1].legend(loc='best')
     axes[1].grid(True)
+
+    # Add space between subplots
+    plt.subplots_adjust(hspace=0.5)
 
     plt.show()
 
@@ -379,10 +388,9 @@ def plot_results_prophet(pred, cf, train, test, country):
     
     # Calculate Mean Absolute Percentage Error (MAPE) for evaluation
     mape = mean_absolute_percentage_error(test.values, pred) * 100
-    axes[0].set_title('Mean Absolute Percentage Error {0:.2f}%'.format(mape))
+    axes[0].set_title('MAPE={0:.2f}%'.format(mape))
     axes[0].legend(loc='best')
     axes[0].grid(True)
-    fig.show()
 
     # Plot the whole time series
     axes[1].plot(range(train.size), train.values, label='Historic', linewidth=2.0, color=(0.36, 0.73, 0.36))
@@ -391,8 +399,17 @@ def plot_results_prophet(pred, cf, train, test, country):
     axes[1].fill_between(range(train.size, train.size + pred.size),
                          cf['yhat_lower'],
                          cf['yhat_upper'], color='grey', alpha=.3)
-    axes[1].grid(True)
+    # Plot beautiful x-axis
+    date_objects = [datetime.strptime(str(date), "%Y-%m-%d %H:%M:%S") for date in train.index]
+    formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
+    axes[1].set_xticks(range(0, len(formatted_dates), 90))
+    axes[1].set_xticklabels(formatted_dates[::90], rotation=45, ha='right')
+    axes[1].set_title('MAPE={0:.2f}%'.format(mape))
     axes[1].legend(loc='best')
+    axes[1].grid(True)
+
+    # Add space between subplots
+    plt.subplots_adjust(hspace=0.5)
 
     plt.show()
 
@@ -707,7 +724,7 @@ def plot_results(y_train, y_val, y_test, y_pred, X_train, X_test, mape, model):
     formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
     axes[0].set_xticks(range(0, len(formatted_dates), 5))
     axes[0].set_xticklabels(formatted_dates[::5], rotation=45, ha='right')
-    axes[0].set_title('Mean absolute percentage error {0:.2f}%'.format(mape))
+    axes[0].set_title('MAPE={0:.2f}%'.format(mape))
     axes[0].legend(loc='best')
     axes[0].grid(True)
 
@@ -726,10 +743,12 @@ def plot_results(y_train, y_val, y_test, y_pred, X_train, X_test, mape, model):
     formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
     axes[1].set_xticks(range(0, len(formatted_dates), 90))
     axes[1].set_xticklabels(formatted_dates[::90], rotation=45, ha='right')
-    axes[1].set_title('Mean absolute percentage error {0:.2f}%'.format(mape))
+    axes[1].set_title('MAPE={0:.2f}%'.format(mape))
     axes[1].legend(loc='best')
     axes[1].grid(True)
     plt.tight_layout()
+    # Add space between subplots
+    plt.subplots_adjust(hspace=0.5)
     plt.show()
 
 def plot_features_importance(model, X_train, name):
@@ -1439,7 +1458,7 @@ def plot_results_LSTM(actual_train, predictions_train, actual_test, predictions_
     axes[0].set_xticks(range(0, len(formatted_dates), 5))
     axes[0].set_xticklabels(formatted_dates[::5], rotation=45, ha='right')
     mape = mean_absolute_percentage_error(actual_test, predictions_test)*100
-    axes[0].set_title('Mean absolute percentage error {0:.2f}%'.format(mape))
+    axes[0].set_title('MAPE={0:.2f}%'.format(mape))
     axes[0].legend(loc='best')
     axes[0].grid(True)
 
@@ -1459,8 +1478,10 @@ def plot_results_LSTM(actual_train, predictions_train, actual_test, predictions_
     formatted_dates = [date.strftime("%Y-%m-%d") for date in date_objects]
     axes[1].set_xticks(range(0, len(formatted_dates), 90))
     axes[1].set_xticklabels(formatted_dates[::90], rotation=45, ha='right')
-    axes[1].set_title('Mean absolute percentage error {0:.2f}%'.format(mape))
+    axes[1].set_title('MAPE={0:.2f}%'.format(mape))
     axes[1].legend(loc='best')
     axes[1].grid(True)
     plt.tight_layout()
+    # Add space between subplots
+    plt.subplots_adjust(hspace=0.5)
     plt.show()
