@@ -1333,6 +1333,7 @@ def compile_and_fit_lstm(model, window, patience=3, MAX_EPOCHS=40):
 
     Returns:
     - history: Training history.
+    - model: Trained model.
     """
     # Set random seeds for reproducibility
     np.random.seed(42)
@@ -1352,7 +1353,7 @@ def compile_and_fit_lstm(model, window, patience=3, MAX_EPOCHS=40):
                         validation_data=window.val,
                         callbacks=[early_stopping])
 
-    return history
+    return history, model
 
 def create_lstm(num_feat):
     """
