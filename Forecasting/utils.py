@@ -1427,7 +1427,7 @@ def get_predictions_lstm(model, scaler, train_df, test_df, window):
 
     return actual_train[3:], predictions_train[3:], actual_test[3:], predictions_test[3:]
 
-def plot_results_LSTM(actual_train, predictions_train, actual_test, predictions_test, test_df, train_df, scaler):
+def plot_results_LSTM(actual_train, predictions_train, actual_test, predictions_test, test_df, train_df, valid_df, scaler):
     """
     Plot actual vs. predicted values for LSTM model.
 
@@ -1438,6 +1438,7 @@ def plot_results_LSTM(actual_train, predictions_train, actual_test, predictions_
         - predictions_test: Predicted values for the test set.
         - test_df (pd.DataFrame): Original test data.
         - train_df (pd.DataFrame): Original training data.
+        - valid_df (pd.DataFrame): Original validation data.
         - scaler: Scaler used for data normalization.
     Returns:
         - None: Plots the results.
@@ -1465,7 +1466,7 @@ def plot_results_LSTM(actual_train, predictions_train, actual_test, predictions_
 
                 
     # Plot the whole time series
-    y_val = pd.DataFrame(scaler.inverse_transform(test_df))[0]
+    y_val = pd.DataFrame(scaler.inverse_transform(valid_df))[0]
     axes[1].plot(range(actual_train.size), actual_train, label='Historic', linewidth=2.0, color=(0.36, 0.73, 0.36 ))
     axes[1].plot(range(len(train_df) + y_val.size, len(train_df) + y_val.size + actual_test.size), actual_test, label='Test Set', linewidth=2.0, color='steelblue')
     axes[1].plot(range(len(train_df) + y_val.size, len(train_df) + y_val.size + predictions_test.size), predictions_test, label='Prediction', linewidth=2.0, color ='orange')
