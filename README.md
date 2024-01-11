@@ -25,7 +25,7 @@ To replicate the analysis and forecasting results, follow these steps:
 
 1. Clone the Repository:
 ```
-git clone https://github.com/davidrosado4/ciber-meets-ml.git && cd ciber-meets-ml
+git clone https://github.com/davidrosado4/cyber-meets-ml.git && cd ciber-meets-ml
 ```
 
 2. Cluster Analysis:
