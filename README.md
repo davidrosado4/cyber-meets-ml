@@ -25,7 +25,7 @@ To replicate the analysis and forecasting results, follow these steps:
 
 1. Clone the Repository:
 ```
-git clone https://github.com/davidrosado4/TFM_clean.git && cd TFM_clean
+git clone https://github.com/davidrosado4/ciber-meets-ml.git && cd ciber-meets-ml
 ```
 
 2. Cluster Analysis:
