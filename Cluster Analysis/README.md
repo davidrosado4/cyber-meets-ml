@@ -8,4 +8,4 @@ This folder contains the necessary code for the Cluster Analysis.
 
  + **second_clustering_stage.ipynb**: This Jupyter notebook focuses on the second stage of the clustering analysis. It involves the use of two more clustering algorithms for further divide the partition created in the first stage.
 
- + **clustering_prediction.ipynb**: This notebook is dedicated to the creation of a prediction algorithm. The algorithm is designed to predict the corresponding first stage cluster group for new records.
+ + **clustering_prediction.ipynb**: This notebook is dedicated to the creation of a prediction algorithm. The algorithm is designed to predict the corresponding first stage cluster groups for new records based in their commands.
