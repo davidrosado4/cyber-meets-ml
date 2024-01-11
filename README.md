@@ -36,14 +36,4 @@ Navigate to /*cluster-analysis* and follow the instructions in the README.
 
 Navigate to /*forecasting* and follow the instructions in the README.
 
-## Acknowledgments
-I would like to express my sincere gratitude to the following organizations for their invaluable support and resources throughout the development of this project:
-
-- Agència de Cyberseguretat de Catalunya:
-Thank you to the Agència de Cyberseguretat de Catalunya for providing essential support and resources that significantly contributed to the success of this research project. Their expertise and assistance were instrumental in the execution of the cluster analysis and forecasting phases.
-
-- Global Cyber Alliance:
-I extend my appreciation to the Global Cyber Alliance for generously providing the cyberattack data used in this study. Their commitment to enhancing global cybersecurity through collaborative initiatives has been a key factor in the depth and quality of the insights gained from the analysis.
-
-These organizations played a crucial role in the realization of this master thesis, and their contributions are greatly appreciated.
 
